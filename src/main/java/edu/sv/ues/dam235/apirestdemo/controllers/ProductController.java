@@ -29,5 +29,32 @@ public class ProductController {
         }
         return null;
     }
+    //Crear Producto
+    @PostMapping //Crear Producto
+    public ResponseEntity<ProductsDTO> createItem(@RequestBody ProductsDTO productDTO) {
+        ProductsDTO newProduct = productServices.createProduct(productDTO);
+        return ResponseEntity.status(201).body(newProduct); // 201 Created
+    }
+
+    //Actualizar Producto
+    @PutMapping
+    public ResponseEntity<ProductsDTO> updateItem(@RequestBody ProductsDTO productDTO) {
+        ProductsDTO updatedProduct = productServices.updateProduct(productDTO);
+        if (updatedProduct != null) {
+            return ResponseEntity.ok(updatedProduct);
+        } else {
+            return ResponseEntity.status(404).build(); // Not Found
+        }
+    }
+
+    // Eliminar Producto
+    @DeleteMapping("/{code}")
+    public ResponseEntity<Void> deleteItem(@PathVariable Integer code) {
+        if (productServices.deleteProduct(code)) {
+            return ResponseEntity.ok().build(); // 200 OK
+        } else {
+            return ResponseEntity.status(404).build(); // Not Found
+        }
+    }
 }
 

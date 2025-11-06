@@ -1,5 +1,6 @@
 package edu.sv.ues.dam235.apirestdemo.configs;
 
+import edu.sv.ues.dam235.apirestdemo.services.TokenBlacklistService;
 import edu.sv.ues.dam235.apirestdemo.utilities.JwtUtil;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
@@ -9,60 +10,53 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
-@Configuration
-@EnableWebSecurity
+import java.io.IOException;
+
+@Component // El filtro es un Componente, no una Configuración.
 public class JwtFilter extends OncePerRequestFilter {
+
     @Autowired
     private JwtUtil jwtUtil;
-    Claims claims = null;
+
+    @Autowired
+    private TokenBlacklistService tokenBlacklistService; // Inyecta el servicio de la lista negra
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        response.setHeader("Access-Control-Allow-Origin", "*");
-        response.setHeader("Access-Control-Allow-Methods", "*");
-        response.setHeader("Access-Control-Allow-Headers", "*");
-        response.setHeader("Access-Control-Allow-Credentials", "false");
-        response.setHeader("Access-Control-Max-Age", "3600");
-        System.out.println("********** CORS Configuration Completed **********");
-// Verificar si es una solicitud preflight (OPTIONS)
-        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
-// Responder con HTTP 200 y no continuar con el filtro
-            response.setStatus(HttpServletResponse.SC_OK);
-            return;
-        }
-        String path = request.getServletPath();
-        if (path.startsWith("/auth/login")
-                || path.startsWith("/auth/verify-token")
-                || path.startsWith("/swagger-ui/")
-                || path.startsWith("/v3/")) {
-            filterChain.doFilter(request, response);
-            return;
-        }
+
+
         String authorizationHeader = request.getHeader("Authorization");
         String token = null;
-        if (authorizationHeader != null &&
-                authorizationHeader.startsWith("Bearer ")) {
+
+        if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
             token = authorizationHeader.substring(7);
         } else {
-            token = authorizationHeader;
+            filterChain.doFilter(request, response);
+            return;
         }
+
+        // --- LÓGICA DE VALIDACIÓN CENTRAL ---
+
+        //  Comprobar si el token está en la lista negra
+        if (tokenBlacklistService.isTokenBlacklisted(token)) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.getWriter().write("Token invalidado por logout.");
+            return;
+        }
+
+        //  Validar el token usando tu JwtUtil
         if (jwtUtil.validatedTokenPermission(token)) {
+            // Si el token es válido y no está en la lista negra, permite que la petición continúe.
             filterChain.doFilter(request, response);
         } else {
-// Token no válido o no proporcionado: enviar error 401
+            // Si el token no es válido por cualquier otra razón (firma, expiración)...
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.getWriter().write("No autorizado: Token no es el correcto o no proporcionado");
+            response.getWriter().write("No autorizado: Token no es el correcto o ha expirado.");
         }
     }
-
-    public Boolean isAdmin() {
-        return "admin".equalsIgnoreCase((String) claims.get("role"));
-    }
-    public Boolean isOther() {
-        return "user".equalsIgnoreCase((String) claims.get("user"));
-    }
 }
-
